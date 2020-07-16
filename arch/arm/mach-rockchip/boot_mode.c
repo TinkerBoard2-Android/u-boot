@@ -10,6 +10,8 @@
 #include <asm/io.h>
 #include <asm/arch/boot_mode.h>
 
+#define CONFIG_GRF_SOC_STATUS3_REG 0xff77e2ac
+
 DECLARE_GLOBAL_DATA_PTR;
 
 static void rkloader_set_bootloader_msg(struct bootloader_message *bmsg)
@@ -93,6 +95,7 @@ int rockchip_get_boot_mode(void)
 	struct blk_desc *dev_desc;
 	disk_partition_t part_info;
 	uint32_t reg_boot_mode;
+	uint32_t reg_soc_status3;
 	char *env_reboot_mode;
 	static int boot_mode = -1;	/* static */
 	int clear_boot_reg = 0;
@@ -125,8 +128,10 @@ int rockchip_get_boot_mode(void)
 		}
 	}
 
-	if (boot_mode != -1)
+	if (boot_mode != -1) {
+		printf("rockchip_get_boot_mode boot_mode = %d\n", boot_mode);
 		return boot_mode;
+	}
 
 	dev_desc = rockchip_get_bootdev();
 	if (!dev_desc) {
@@ -207,9 +212,16 @@ fallback:
 			boot_mode = BOOT_MODE_WATCHDOG;
 			break;
 		default:
-			printf("boot mode: None\n");
-			boot_mode = BOOT_MODE_UNDEFINE;
-			flash_bootloader_msg();
+			reg_soc_status3 = readl((void *)CONFIG_GRF_SOC_STATUS3_REG);
+			if (reg_soc_status3 & (1 << 12)) {
+				printf("usbcphy0_otg_utmi_bvalid = 1\n");
+				boot_mode = BOOT_MODE_UMS;
+				clear_boot_reg = 1;
+			} else {
+				printf("boot mode: None\n");
+				boot_mode = BOOT_MODE_UNDEFINE;
+				flash_bootloader_msg();
+			}
 		}
 	}
 
