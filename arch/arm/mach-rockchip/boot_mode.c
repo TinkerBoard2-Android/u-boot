@@ -12,6 +12,64 @@
 
 DECLARE_GLOBAL_DATA_PTR;
 
+static void rkloader_set_bootloader_msg(struct bootloader_message *bmsg)
+{
+	struct blk_desc *dev_desc;
+	disk_partition_t part_info;
+	int ret, cnt;
+#ifdef CONFIG_ANDROID_BOOT_IMAGE
+	u32 bcb_offset = android_bcb_msg_sector_offset();
+#else
+	u32 bcb_offset = BOOTLOADER_MESSAGE_BLK_OFFSET;
+#endif
+
+	dev_desc = rockchip_get_bootdev();
+	if (!dev_desc) {
+		printf("%s: dev_desc is NULL!\n", __func__);
+		return;
+	}
+
+	ret = part_get_info_by_name(dev_desc, PART_MISC, &part_info);
+	if (ret < 0) {
+		printf("%s: Could not found misc partition\n", __func__);
+		return;
+	}
+
+	cnt = DIV_ROUND_UP(sizeof(struct bootloader_message), dev_desc->blksz);
+	ret = blk_dwrite(dev_desc,
+			 part_info.start + bcb_offset,
+			 cnt, bmsg);
+	if (ret != cnt)
+		printf("%s: Wipe data failed\n", __func__);
+}
+
+/*
+ * This function is used to flash bootloader message.
+ */
+void flash_bootloader_msg(void)
+{
+	struct bootloader_message *bmsg = NULL;
+	struct blk_desc *dev_desc;
+	disk_partition_t part_info;
+	int cnt;
+#ifdef CONFIG_ANDROID_BOOT_IMAGE
+	u32 bcb_offset = android_bcb_msg_sector_offset();
+#else
+	u32 bcb_offset = BOOTLOADER_MESSAGE_BLK_OFFSET;
+#endif
+
+	dev_desc = rockchip_get_bootdev();
+	part_get_info_by_name(dev_desc, PART_MISC, &part_info);
+	cnt = DIV_ROUND_UP(sizeof(struct bootloader_message), dev_desc->blksz);
+	bmsg = memalign(ARCH_DMA_MINALIGN, cnt * dev_desc->blksz);
+	blk_dread(dev_desc, part_info.start + bcb_offset, cnt, bmsg);
+
+	strcpy(bmsg->command, "");
+	strcpy(bmsg->recovery, "");
+	rkloader_set_bootloader_msg(bmsg);
+	printf("Flash bootloader message to normal!\n");
+}
+
 /*
  * Generally, we have 3 ways to get reboot mode:
  *
@@ -119,6 +177,7 @@ fallback:
 			printf("boot mode: normal\n");
 			boot_mode = BOOT_MODE_NORMAL;
 			clear_boot_reg = 1;
+			flash_bootloader_msg();
 			break;
 		case BOOT_RECOVERY:
 			printf("boot mode: recovery (cmd)\n");
@@ -146,6 +205,7 @@ fallback:
 		default:
 			printf("boot mode: None\n");
 			boot_mode = BOOT_MODE_UNDEFINE;
+			flash_bootloader_msg();
 		}
 	}
 
