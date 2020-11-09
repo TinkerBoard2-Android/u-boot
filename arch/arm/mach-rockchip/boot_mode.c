@@ -171,6 +171,10 @@ fallback:
 		printf("boot mode: recovery (misc)\n");
 		boot_mode = BOOT_MODE_RECOVERY;
 		clear_boot_reg = 1;
+	} else if (bmsg && !strcmp(bmsg->command, "boot-fastboot")) {
+		printf("boot mode: normal\n");
+		boot_mode = BOOT_MODE_NORMAL;
+		clear_boot_reg = 1;
 	} else {
 		switch (reg_boot_mode) {
 		case BOOT_NORMAL:
