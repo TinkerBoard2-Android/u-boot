@@ -548,6 +548,44 @@ function unwind_addr_or_continue()
 	fi
 }
 
+function pack_idb_image()
+{
+               INI=${INI_LOADER}
+       if [ ! -f ${INI} ]; then
+               echo "ERROR: No ${INI}"
+               exit 1
+       fi
+
+       # chip
+       COMMON_H=`grep "_common.h:" include/autoconf.mk.dep | awk -F "/" '{ printf $3 }'`
+       PLAT=${COMMON_H%_*}
+
+       # file
+       SPL_BIN=${RKBIN}/`sed -n "/FlashBoot=/s/FlashBoot=//p" ${INI} | tr -d '\r'`
+       TPL_BIN=${RKBIN}/`sed -n "/FlashData=/s/FlashData=//p" ${INI} | tr -d '\r'`
+       if [ ! -z "${ARG_SPL_BIN}" ]; then
+               SPL_BIN=${ARG_SPL_BIN}
+       fi
+       if [ ! -z "${ARG_TPL_BIN}" ]; then
+               TPL_BIN=${ARG_TPL_BIN}
+       fi
+
+       # pack
+       rm idbloader.img -f
+       # ./tools/mkimage -n ${PLAT} -T rksd -d ${TPL_BIN} idbloader.img
+       # cat ${SPL_BIN} >> idbloader.img
+       ./tools/mkimage -n ${PLAT} -T rksd -d ${TPL_BIN}:${SPL_BIN} idbloader.img
+       echo "Input:"
+       echo "    ${INI}"
+       echo "    ${TPL_BIN}"
+       echo "    ${SPL_BIN}"
+       echo
+       echo "Pack ${PLAT} idbloader.img okay!"
+       echo
+}
+
+
+
 function pack_idblock()
 {
 	INI=${INI_LOADER}
@@ -737,6 +775,7 @@ function pack_images()
 		pack_uboot_image
 		pack_trust_image
 		pack_loader_image
+		pack_idb_image
 	elif [ "${PLAT_TYPE}" == "FIT" ]; then
 		pack_fit_image ${ARG_LIST_FIT}
 	fi

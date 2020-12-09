@@ -11,6 +11,7 @@ static int do_rkimg_test(cmd_tbl_t *cmdtp, int flag,
 			 int argc, char *const argv[])
 {
 	struct blk_desc *dev_desc;
+	disk_partition_t part_info;
 	u32 *buffer;
 	int ret;
 
@@ -40,12 +41,20 @@ static int do_rkimg_test(cmd_tbl_t *cmdtp, int flag,
 		else
 			printf("Found IDB in U-disk\n");
 
-		/* TAG in IDB */
-		if (0 == buffer[128 + 104 / 4]) {
-			if (!strcmp("mmc", argv[1]))
-				env_update("bootargs", "sdfwupdate");
-			else
-				env_update("bootargs", "usbfwupdate");
+		if(part_get_info_by_name(dev_desc, "super", &part_info)){
+			printf("found super part.\n");
+			ret = CMD_RET_SUCCESS;
+		}else{
+			/* TAG in IDB */
+			if (0 == buffer[128 + 104 / 4]) {
+				if (!strcmp("mmc", argv[1]))
+					env_update("bootargs", "sdfwupdate");
+				else
+					env_update("bootargs", "usbfwupdate");
+				ret = CMD_RET_SUCCESS;
+			}else{
+				ret = CMD_RET_FAILURE;
+			}
 		}
 	} else {
 		ret = CMD_RET_FAILURE;
