@@ -3,7 +3,8 @@
 #
 # SPDX-License-Identifier:	GPL-2.0+
 #
-
+obj-$(CONFIG_DRM_I2C_SN65DSI84) += sn65dsi84.o
+obj-$(CONFIG_DRM_I2C_SN65DSI86) += sn65dsi86.o
 obj-y += rockchip_display.o rockchip_crtc.o rockchip_phy.o rockchip_bridge.o \
 		rockchip_vop.o rockchip_vop_reg.o bmp_helper.o
 

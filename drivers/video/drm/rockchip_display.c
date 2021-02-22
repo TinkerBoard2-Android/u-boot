@@ -264,6 +264,35 @@ int drm_mode_vrefresh(const struct drm_display_mode *mode)
 
 extern bool powertip_panel_connected;
 extern bool rpi_panel_connected;
+#if defined(CONFIG_DRM_I2C_SN65DSI84)
+extern void sn65dsi84_setup_desc( struct drm_display_mode *dmode);
+extern bool sn65dsi84_is_connected(void);
+#else
+void sn65dsi84_setup_desc( struct drm_display_mode *dmode)
+{
+	return;
+}
+
+static bool sn65dsi84_is_connected(void)
+{
+	return false;
+}
+#endif
+
+#if defined(CONFIG_DRM_I2C_SN65DSI86)
+extern void sn65dsi86_setup_desc( struct drm_display_mode *dmode);
+extern bool sn65dsi86_is_connected(void);
+#else
+void sn65dsi86_setup_desc( struct drm_display_mode *dmode)
+{
+	return;
+}
+
+static bool sn65dsi86_is_connected(void)
+{
+	return false;
+}
+#endif
 
 static int display_get_timing_from_dts(struct panel_state *panel_state,
 				       struct drm_display_mode *mode)
@@ -281,7 +310,7 @@ static int display_get_timing_from_dts(struct panel_state *panel_state,
 	} else if (powertip_panel_connected) {
 		timing = dev_read_subnode(panel->dev, "powertip-display-timings");
 	} else{
-	timing = dev_read_subnode(panel->dev, "display-timings");
+		timing = dev_read_subnode(panel->dev, "display-timings");
 	}
 
 	if (!ofnode_valid(timing))
@@ -345,6 +374,15 @@ static int display_get_timing_from_dts(struct panel_state *panel_state,
 	mode->clock = pixelclock / 1000;
 	mode->flags = flags;
 
+	if (sn65dsi84_is_connected())
+		sn65dsi84_setup_desc(mode);
+
+	if (sn65dsi86_is_connected())
+		sn65dsi86_setup_desc(mode);
+
+	printk("display_get_timing_from_dts hactive = %d vactive = %d pixelclock = %d flags =0x%x\n", hactive, vactive, pixelclock,(unsigned int) flags);
+	printk("display_get_timing_from_dts hfront_porch = %d hback_porch = %d hsync_len = %d\n", hfront_porch, hback_porch, hsync_len);
+	printk("display_get_timing_from_dts vfront_porch = %d vback_porch = %d vsync_len = %d\n", vfront_porch, vback_porch, vsync_len);
 	return 0;
 }
 
@@ -1172,8 +1210,16 @@ static struct rockchip_panel *rockchip_of_find_panel(struct udevice *dev)
 	struct udevice *panel_dev;
 	int ret;
 
+#if 0
+	struct udevice *i2c_dev;
+
+	printf(" rockchip_of_find_panel  sn65dsi84@2c\n");
+	ret = uclass_get_device_by_name(UCLASS_I2C_GENERIC, "sn65dsi84@2c", &i2c_dev);
+#endif
+
 	panel_node = dev_read_subnode(dev, "panel");
 	if (ofnode_valid(panel_node) && ofnode_is_available(panel_node)) {
+		printf("rockchip_of_find_panel  panel_node->np->full_name=%s panel_node->np->name =%s+\n", panel_node.np->full_name, panel_node.np->name);
 		ret = uclass_get_device_by_ofnode(UCLASS_PANEL, panel_node,
 						  &panel_dev);
 		if (!ret)
@@ -1328,6 +1374,29 @@ static struct rockchip_phy *rockchip_of_find_phy(struct udevice *dev)
 
 extern int  panel_i2c_reg_read(struct udevice *dev, uint offset);
 
+int  load_sn65dsi8x_driver(/*struct udevice *dev,*/char* device_name)
+{
+	struct udevice *i2c_dev;
+	/*ofnode panel_node;
+	struct udevice *panel_dev;*/
+	int ret;
+
+	printf("load_sn65dsi8x_driver: %s\n", device_name);
+	ret = uclass_get_device_by_name(UCLASS_I2C_GENERIC, device_name, &i2c_dev);
+
+	/*panel_node = dev_read_subnode(dev, "panel");
+	if (ofnode_valid(panel_node) && ofnode_is_available(panel_node)) {
+		printf("rockchip_of_find_panel  panel_node->np->full_name=%s panel_node->np->name =%s+\n", panel_node.np->full_name, panel_node.np->name);
+		ret = uclass_get_device_by_ofnode(UCLASS_PANEL, panel_node,
+						  &panel_dev);
+		printf("rockchip_of_find_panel-\n");
+		if (!ret)
+			goto found;
+	}*/
+	printf("load_sn65dsi8x_driver: %s : ret=%d\n", device_name, ret);
+	return ret;
+}
+
 static int rockchip_display_probe(struct udevice *dev)
 {
 	struct video_priv *uc_priv = dev_get_uclass_priv(dev);
@@ -1347,6 +1416,7 @@ static int rockchip_display_probe(struct udevice *dev)
 	struct device_node *port_node, *vop_node, *ep_node;
 	struct public_phy_data *data;
 
+	printf("rockchip_display_probe\n");
 	/* Before relocation we don't need to do anything */
 	if (!(gd->flags & GD_FLG_RELOC))
 		return 0;
@@ -1364,35 +1434,50 @@ static int rockchip_display_probe(struct udevice *dev)
 	if (!ofnode_valid(route_node))
 		return -ENODEV;
 
+	#if defined(CONFIG_DRM_I2C_SN65DSI84)
+	load_sn65dsi8x_driver("sn65dsi84@2c");
+	#endif
+
+	#if defined(CONFIG_DRM_I2C_SN65DSI86)
+	load_sn65dsi8x_driver("sn65dsi86@2d");
+	#endif
+
 	ofnode_for_each_subnode(node, route_node) {
 		if (!ofnode_is_available(node))
 			continue;
-
+#if 1
 		if (!strncmp(node.np->name, "route-dsi", 9)) {
 			struct udevice *powertip_dev;
 			struct udevice *rpi_dev;
 			int powertip_buffer = 0;
 			int rpi_buffer = 0;
 
-			i2c_get_chip_for_busnum(0x8, 0x45, 1, &rpi_dev);//rpi
-			rpi_buffer = panel_i2c_reg_read(rpi_dev, 0x80);
+			if (sn65dsi84_is_connected() || sn65dsi86_is_connected()) {
+				printf("rockchip_display_probe: sn65dsi8x_is_connected\n");
+			} else {
+				i2c_get_chip_for_busnum(0x8, 0x45, 1, &rpi_dev);//rpi
+				rpi_buffer = panel_i2c_reg_read(rpi_dev, 0x80);
 
-			i2c_get_chip_for_busnum(0x8, 0x36, 1, &powertip_dev);//powertip
-			powertip_buffer = panel_i2c_reg_read(powertip_dev, 0x4);
-			printf("rockchip_display_probe rpi_buffer=%d  powertip_buffer=%d\n",rpi_buffer, powertip_buffer);
+				i2c_get_chip_for_busnum(0x8, 0x36, 1, &powertip_dev);//powertip
+				powertip_buffer = panel_i2c_reg_read(powertip_dev, 0x4);
+				printf("rockchip_display_probe rpi_buffer=%d  powertip_buffer=%d\n",rpi_buffer, powertip_buffer);
 
-			if (rpi_buffer == 0xDE  || rpi_buffer == 0xC3) {
-				rpi_panel_connected = true;
-			}  else if ((powertip_buffer > 0) && (powertip_buffer & 0xF0) == 0x80) {
-				powertip_panel_connected = true;
+				if (rpi_buffer == 0xDE  || rpi_buffer == 0xC3) {
+					rpi_panel_connected = true;
+				}  else if ((powertip_buffer > 0) && (powertip_buffer & 0xF0) == 0x80) {
+					powertip_panel_connected = true;
+				}
 			}
 
-			if (!powertip_panel_connected && !rpi_panel_connected) {
-					printf("rockchip_display_probe: no dsi panel connected\n");
+			if (!powertip_panel_connected &&
+				!rpi_panel_connected &&
+				!sn65dsi84_is_connected() &&
+				!sn65dsi86_is_connected()) {
+					printf("rockchip_display_probe: no dsi panel  and no sn65dsi8x connected\n");
 					continue;
 			}
 		}
-
+#endif
 		phandle = ofnode_read_u32_default(node, "connect", -1);
 		if (phandle < 0) {
 			printf("Warn: can't find connect node's handle\n");
@@ -1445,12 +1530,17 @@ static int rockchip_display_probe(struct udevice *dev)
 		memset(s, 0, sizeof(*s));
 
 		INIT_LIST_HEAD(&s->head);
-		ret = ofnode_read_string_index(node, "logo,uboot", 0, &name);
-		if (!ret)
-			memcpy(s->ulogo_name, name, strlen(name));
-		ret = ofnode_read_string_index(node, "logo,kernel", 0, &name);
-		if (!ret)
-			memcpy(s->klogo_name, name, strlen(name));
+		if (sn65dsi84_is_connected() || sn65dsi86_is_connected()) {
+			memcpy(s->ulogo_name, "logo.bmp", strlen("logo.bmp"));
+			memcpy(s->klogo_name, "logo_kernel.bmp", strlen("logo_kernel.bmp"));
+		} else {
+			ret = ofnode_read_string_index(node, "logo,uboot", 0, &name);
+			if (!ret)
+				memcpy(s->ulogo_name, name, strlen(name));
+			ret = ofnode_read_string_index(node, "logo,kernel", 0, &name);
+			if (!ret)
+				memcpy(s->klogo_name, name, strlen(name));
+		}
 		ret = ofnode_read_string_index(node, "logo,mode", 0, &name);
 		if (!strcmp(name, "fullscreen"))
 			s->logo_mode = ROCKCHIP_DISPLAY_FULLSCREEN;

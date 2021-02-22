@@ -547,6 +547,7 @@ static int rockchip_panel_probe(struct udevice *dev)
 	const void *data;
 	int len = 0;
 
+	printf("rockchip_panel_probe\n");
 	ret = gpio_request_by_name(dev, "enable-gpios", 0,
 				   &priv->enable_gpio, GPIOD_IS_OUT);
 	if (ret && ret != -ENOENT) {

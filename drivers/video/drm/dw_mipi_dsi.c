@@ -889,12 +889,52 @@ static void dw_mipi_dsi_video_mode_config(struct dw_mipi_dsi *dsi)
 				AUTO_CLKLANE_CTRL, AUTO_CLKLANE_CTRL);
 }
 
+#if defined(CONFIG_DRM_I2C_SN65DSI84)
+extern void sn65dsi84_bridge_enable(void);
+extern bool sn65dsi84_is_connected(void);
+#else
+void sn65dsi84_bridge_enable(void)
+{
+	return;
+}
+
+static bool sn65dsi84_is_connected(void)
+{
+	return false;
+}
+#endif
+
+#if defined(CONFIG_DRM_I2C_SN65DSI86)
+extern void sn65dsi86_bridge_enable(void);
+extern bool sn65dsi86_is_connected(void);
+#else
+void sn65dsi86_bridge_enable(void)
+{
+	return;
+}
+
+static bool sn65dsi86_is_connected(void)
+{
+	return false;
+}
+#endif
+
 static void dw_mipi_dsi_enable(struct dw_mipi_dsi *dsi)
 {
 	const struct drm_display_mode *mode = &dsi->mode;
 
 	dsi_update_bits(dsi, DSI_LPCLK_CTRL,
 			PHY_TXREQUESTCLKHS, PHY_TXREQUESTCLKHS);
+
+	if (sn65dsi84_is_connected()) {
+		printf("dw_mipi_dsi_enable->sn65dsi84_bridge_enable\n");
+		sn65dsi84_bridge_enable();
+	}
+
+	if (sn65dsi86_is_connected()) {
+		printf("dw_mipi_dsi_enable->sn65dsi86_bridge_enable\n");
+		sn65dsi86_bridge_enable();
+	}
 
 	dsi_write(dsi, DSI_PWR_UP, RESET);
 
@@ -1091,11 +1131,11 @@ static int dw_mipi_dsi_connector_init(struct display_state *state)
 	conn_state->output_mode = ROCKCHIP_OUT_MODE_P888;
 	conn_state->color_space = V4L2_COLORSPACE_DEFAULT;
 	conn_state->type = DRM_MODE_CONNECTOR_DSI;
-
+	printf("dw_mipi_dsi_connector_init dsi->id=%d\n", dsi->id);
 	if (dsi->id) {
 		struct udevice *dev;
 		int ret;
-
+		printf("class_get_device_by_name(UCLASS_DISPLAY,  dsi@ff960000  dsi->id=%d\n", dsi->id);
 		ret = uclass_get_device_by_name(UCLASS_DISPLAY, "dsi@ff960000",
 						&dev);
 		if (ret)
@@ -1637,24 +1677,28 @@ static int dw_mipi_dsi_child_pre_probe(struct udevice *dev)
 	int rpi_buffer = 0;
 	int ret;
 
-	i2c_get_chip_for_busnum(0x8, 0x45, 1, &rpi_dev);//rpi
-	rpi_buffer = panel_i2c_reg_read(rpi_dev, 0x80);
+	if (!sn65dsi84_is_connected() && !sn65dsi86_is_connected()) {
+		i2c_get_chip_for_busnum(0x8, 0x45, 1, &rpi_dev);//rpi
+		rpi_buffer = panel_i2c_reg_read(rpi_dev, 0x80);
 
-	i2c_get_chip_for_busnum(0x8, 0x36, 1, &powertip_dev);//powertip
-	powertip_buffer = panel_i2c_reg_read(powertip_dev, 0x4);
-	printf(" dw_mipi_dsi_child_pre_probe rpi_buffer=%d  powertip_buffer=%d\n",rpi_buffer, powertip_buffer);
+		i2c_get_chip_for_busnum(0x8, 0x36, 1, &powertip_dev);//powertip
+		powertip_buffer = panel_i2c_reg_read(powertip_dev, 0x4);
+		printf("dw_mipi_dsi_child_pre_probe rpi_buffer=%d  powertip_buffer=%d\n",rpi_buffer, powertip_buffer);
 
-	if (rpi_buffer == 0xDE  || rpi_buffer == 0xC3) {
-		rpi_panel_connected = true;
-		device->lanes = 1;
-		device->format = MIPI_DSI_FMT_RGB888;
-		device->mode_flags = MIPI_DSI_MODE_VIDEO | MIPI_DSI_MODE_VIDEO_BURST ;
-	} else if ((powertip_buffer & 0xF0) == 0x80) {
-		powertip_panel_connected = true;
-		powertip_id = powertip_buffer;
-		device->lanes = 2;
-		device->format = MIPI_DSI_FMT_RGB888;
-		device->mode_flags = MIPI_DSI_MODE_VIDEO | MIPI_DSI_MODE_VIDEO_BURST |MIPI_DSI_MODE_LPM;
+		if (rpi_buffer == 0xDE  || rpi_buffer == 0xC3) {
+			rpi_panel_connected = true;
+			device->lanes = 1;
+			device->format = MIPI_DSI_FMT_RGB888;
+			device->mode_flags = MIPI_DSI_MODE_VIDEO | MIPI_DSI_MODE_VIDEO_BURST ;
+		} else if ((powertip_buffer > 0) && (powertip_buffer & 0xF0) == 0x80) {
+			powertip_panel_connected = true;
+			powertip_id = powertip_buffer;
+			device->lanes = 2;
+			device->format = MIPI_DSI_FMT_RGB888;
+			device->mode_flags = MIPI_DSI_MODE_VIDEO | MIPI_DSI_MODE_VIDEO_BURST |MIPI_DSI_MODE_LPM;
+		}
+	}else {
+		printf("dw_mipi_dsi_child_pre_probe lanes =%u format= %d mode_flags =0x%lx\n", device->lanes, device->format, device->mode_flags);
 	}
 
 	ret = mipi_dsi_attach(device);
