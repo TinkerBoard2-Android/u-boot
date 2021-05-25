@@ -272,6 +272,29 @@ int crypto_cipher(struct udevice *dev, cipher_context *ctx,
 	return ops->cipher_crypt(dev, ctx, in, out, len, enc);
 }
 
+int crypto_mac(struct udevice *dev, cipher_context *ctx,
+	       const u8 *in, u32 len, u8 *tag)
+{
+	const struct dm_crypto_ops *ops = device_get_ops(dev);
+
+	if (!ops || !ops->cipher_mac)
+		return -ENOSYS;
+
+	return ops->cipher_mac(dev, ctx, in, len, tag);
+}
+
+int crypto_ae(struct udevice *dev, cipher_context *ctx,
+	      const u8 *in, u32 len, const u8 *aad, u32 aad_len,
+	      u8 *out, u8 *tag)
+{
+	const struct dm_crypto_ops *ops = device_get_ops(dev);
+
+	if (!ops || !ops->cipher_ae)
+		return -ENOSYS;
+
+	return ops->cipher_ae(dev, ctx, in, len, aad, aad_len, out, tag);
+}
+
 UCLASS_DRIVER(crypto) = {
 	.id	= UCLASS_CRYPTO,
 	.name	= "crypto",
