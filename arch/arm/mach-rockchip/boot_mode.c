@@ -14,6 +14,64 @@
 
 DECLARE_GLOBAL_DATA_PTR;
 
+static void rkloader_set_bootloader_msg(struct bootloader_message *bmsg)
+{
+	struct blk_desc *dev_desc;
+	disk_partition_t part_info;
+	int ret, cnt;
+#ifdef CONFIG_ANDROID_BOOT_IMAGE
+	u32 bcb_offset = android_bcb_msg_sector_offset();
+#else
+	u32 bcb_offset = BOOTLOADER_MESSAGE_BLK_OFFSET;
+#endif
+
+	dev_desc = rockchip_get_bootdev();
+	if (!dev_desc) {
+		printf("%s: dev_desc is NULL!\n", __func__);
+		return;
+	}
+
+	ret = part_get_info_by_name(dev_desc, PART_MISC, &part_info);
+	if (ret < 0) {
+		printf("%s: Could not found misc partition\n", __func__);
+		return;
+	}
+
+	cnt = DIV_ROUND_UP(sizeof(struct bootloader_message), dev_desc->blksz);
+	ret = blk_dwrite(dev_desc,
+			 part_info.start + bcb_offset,
+			 cnt, bmsg);
+	if (ret != cnt)
+		printf("%s: Wipe data failed\n", __func__);
+}
+
+/*
+ * This function is used to flash bootloader message.
+ */
+void flash_bootloader_msg(void)
+{
+	struct bootloader_message *bmsg = NULL;
+	struct blk_desc *dev_desc;
+	disk_partition_t part_info;
+	int cnt;
+#ifdef CONFIG_ANDROID_BOOT_IMAGE
+	u32 bcb_offset = android_bcb_msg_sector_offset();
+#else
+	u32 bcb_offset = BOOTLOADER_MESSAGE_BLK_OFFSET;
+#endif
+
+	dev_desc = rockchip_get_bootdev();
+	part_get_info_by_name(dev_desc, PART_MISC, &part_info);
+	cnt = DIV_ROUND_UP(sizeof(struct bootloader_message), dev_desc->blksz);
+	bmsg = memalign(ARCH_DMA_MINALIGN, cnt * dev_desc->blksz);
+	blk_dread(dev_desc, part_info.start + bcb_offset, cnt, bmsg);
+
+	strcpy(bmsg->command, "");
+	strcpy(bmsg->recovery, "");
+	rkloader_set_bootloader_msg(bmsg);
+	printf("Flash bootloader message to normal!\n");
+}
+
 enum {
 	PH = 0,	/* P: Priority, H: high, M: middle, L: low*/
 	PM,
@@ -56,6 +114,35 @@ static int misc_require_recovery(u32 bcb_offset)
 	free(bmsg);
 out:
 	return recovery;
+}
+
+static int misc_require_fastboot(u32 bcb_offset)
+{
+	struct bootloader_message *bmsg;
+	struct blk_desc *dev_desc;
+	disk_partition_t part;
+	int cnt, fastboot = 0;
+
+	dev_desc = rockchip_get_bootdev();
+	if (!dev_desc) {
+		printf("dev_desc is NULL!\n");
+		goto out;
+	}
+
+	if (part_get_info_by_name(dev_desc, PART_MISC, &part) < 0) {
+		printf("No misc partition\n");
+		goto out;
+	}
+
+	cnt = DIV_ROUND_UP(sizeof(struct bootloader_message), dev_desc->blksz);
+	bmsg = memalign(ARCH_DMA_MINALIGN, cnt * dev_desc->blksz);
+	if (blk_dread(dev_desc, part.start + bcb_offset, cnt, bmsg) != cnt)
+		fastboot = 0;
+	else
+		fastboot = !strcmp(bmsg->command, "boot-fastboot");
+
+out:
+	return fastboot;
 }
 
 int get_bcb_recovery_msg(void)
@@ -163,12 +250,17 @@ int rockchip_get_boot_mode(void)
 	} else if (misc_require_recovery(bcb_offset)) {
 		printf("boot mode: recovery (misc)\n");
 		boot_mode[PM] = BOOT_MODE_RECOVERY;
+	} else if (misc_require_fastboot(bcb_offset)) {
+		printf("boot mode: normal\n");
+		boot_mode[PM] = BOOT_MODE_NORMAL;
+		clear_boot_reg = 1;
 	} else {
 		switch (reg_boot_mode) {
 		case BOOT_NORMAL:
 			printf("boot mode: normal\n");
 			boot_mode[PL] = BOOT_MODE_NORMAL;
 			clear_boot_reg = 1;
+			flash_bootloader_msg();
 			break;
 		case BOOT_RECOVERY:
 			printf("boot mode: recovery (cmd)\n");
@@ -202,6 +294,7 @@ int rockchip_get_boot_mode(void)
 			} else {
 				printf("boot mode: None\n");
 				boot_mode[PL] = BOOT_MODE_UNDEFINE;
+				flash_bootloader_msg();
 			}
 		}
 	}
