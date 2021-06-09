@@ -29,6 +29,11 @@
 #include <console.h>
 #include <sysmem.h>
 
+#include <asm/io.h>
+
+#define GPIO1_SWPORTA_DDR_REG	0xff730004
+#define GPIO1_SWPORTA_DR_REG	0xff730000
+
 DECLARE_GLOBAL_DATA_PTR;
 
 #if defined(CONFIG_ANDROID_AB) && defined(CONFIG_ANDROID_AVB)
@@ -1035,7 +1040,17 @@ int android_bootloader_boot_flow(struct blk_desc *dev_desc,
 			if (android_image_load_by_partname(dev_desc,
 							   boot_partname,
 							   &load_address)) {
-				printf("Android image load failed\n");
+				printf("Android image load failed, reboot\n");
+
+				uint32_t reg_gpio1a_ddr = readl((void *)GPIO1_SWPORTA_DDR_REG);
+				uint32_t reg_gpio1a_dr = readl((void *)GPIO1_SWPORTA_DR_REG);
+
+				// Set GPIO1_A6 to direction output.
+				writel(reg_gpio1a_ddr | (1 << 6), GPIO1_SWPORTA_DDR_REG);
+
+				// Set GPIO1_A6 to High.
+				writel(reg_gpio1a_dr | (1 << 6), GPIO1_SWPORTA_DR_REG);
+
 				return -1;
 			}
 		} else {
@@ -1057,7 +1072,17 @@ int android_bootloader_boot_flow(struct blk_desc *dev_desc,
 	if (android_image_load_by_partname(dev_desc,
 					   boot_partname,
 					   &load_address)) {
-		printf("Android image load failed\n");
+		printf("Android image load failed, reboot\n");
+
+		uint32_t reg_gpio1a_ddr = readl((void *)GPIO1_SWPORTA_DDR_REG);
+		uint32_t reg_gpio1a_dr = readl((void *)GPIO1_SWPORTA_DR_REG);
+
+		// Set GPIO1_A6 to direction output.
+		writel(reg_gpio1a_ddr | (1 << 6), GPIO1_SWPORTA_DDR_REG);
+
+		// Set GPIO1_A6 to High.
+		writel(reg_gpio1a_dr | (1 << 6), GPIO1_SWPORTA_DR_REG);
+
 		return -1;
 	}
 #endif
