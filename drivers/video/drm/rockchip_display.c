@@ -410,6 +410,9 @@ int drm_mode_vrefresh(const struct drm_display_mode *mode)
 	return refresh;
 }
 
+extern bool powertip_panel_connected;
+extern bool rpi_panel_connected;
+
 static int display_get_timing_from_dts(struct panel_state *panel_state,
 				       struct drm_display_mode *mode)
 {
@@ -421,7 +424,13 @@ static int display_get_timing_from_dts(struct panel_state *panel_state,
 	int val, flags = 0;
 	ofnode timing, native_mode;
 
-	timing = dev_read_subnode(panel->dev, "display-timings");
+	if (rpi_panel_connected) {
+		timing = dev_read_subnode(panel->dev, "rpi-display-timings");
+	} else if (powertip_panel_connected) {
+		timing = dev_read_subnode(panel->dev, "powertip-display-timings");
+	} else{
+		timing = dev_read_subnode(panel->dev, "display-timings");
+	}
 	if (!ofnode_valid(timing))
 		return -ENODEV;
 
