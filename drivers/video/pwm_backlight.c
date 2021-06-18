@@ -14,6 +14,8 @@
 
 DECLARE_GLOBAL_DATA_PTR;
 
+unsigned int minimal_brightness = 0;
+
 struct pwm_backlight_priv {
 	struct udevice *reg;
 	struct gpio_desc enable;
@@ -24,6 +26,11 @@ struct pwm_backlight_priv {
 	uint default_level;
 	uint min_level;
 	uint max_level;
+
+	unsigned int 		enable_soc_enablekl_delay;
+	unsigned int 		disable_soc_enablekl_delay;
+	struct gpio_desc	soc_enablekl;
+	bool power_sequence_reverse;
 };
 
 static int pwm_backlight_enable(struct udevice *dev)
@@ -46,6 +53,14 @@ static int pwm_backlight_enable(struct udevice *dev)
 		mdelay(120);
 	}
 
+	if (priv->power_sequence_reverse) {
+		if (dm_gpio_is_valid(&priv->soc_enablekl))
+			dm_gpio_set_value(&priv->soc_enablekl, 1);
+
+		if (priv->enable_soc_enablekl_delay)
+			mdelay(priv->enable_soc_enablekl_delay);
+	}
+
 	ret = pwm_set_invert(priv->pwm, priv->channel, priv->polarity);
 	if (ret) {
 		dev_err(dev, "Failed to invert PWM\n");
@@ -63,6 +78,15 @@ static int pwm_backlight_enable(struct udevice *dev)
 		return ret;
 	mdelay(10);
 
+	if (!priv->power_sequence_reverse) {
+		printf("%s: \n", __func__);
+		if (priv->enable_soc_enablekl_delay)
+			mdelay(priv->enable_soc_enablekl_delay);
+
+		if (dm_gpio_is_valid(&priv->soc_enablekl))
+			dm_gpio_set_value(&priv->soc_enablekl, 1);
+	}
+
 	if (dm_gpio_is_valid(&priv->enable))
 		dm_gpio_set_value(&priv->enable, 1);
 
@@ -74,6 +98,14 @@ static int pwm_backlight_disable(struct udevice *dev)
 	struct pwm_backlight_priv *priv = dev_get_priv(dev);
 	struct dm_regulator_uclass_platdata *plat;
 	int ret;
+
+	if (!priv->power_sequence_reverse) {
+		if (dm_gpio_is_valid(&priv->soc_enablekl))
+			dm_gpio_set_value(&priv->soc_enablekl, 0);
+
+		if (priv->disable_soc_enablekl_delay)
+			mdelay(priv->disable_soc_enablekl_delay);
+	}
 
 	ret = pwm_set_config(priv->pwm, priv->channel, priv->period_ns, 0);
 	if (ret)
@@ -88,6 +120,14 @@ static int pwm_backlight_disable(struct udevice *dev)
 		ret = pwm_set_enable(priv->pwm, priv->channel, false);
 		if (ret)
 			return ret;
+	}
+
+	if (priv->power_sequence_reverse) {
+		if (priv->disable_soc_enablekl_delay)
+			mdelay(priv->disable_soc_enablekl_delay);
+
+		if (dm_gpio_is_valid(&priv->soc_enablekl))
+			dm_gpio_set_value(&priv->soc_enablekl, 0);
 	}
 
 	mdelay(10);
@@ -158,6 +198,18 @@ static int pwm_backlight_ofdata_to_platdata(struct udevice *dev)
 		priv->default_level = index;
 		priv->max_level = 255;
 	}
+
+	minimal_brightness = dev_read_u32_default(dev, "minimal-brightness-level", 30);
+	priv->enable_soc_enablekl_delay = dev_read_u32_default(dev, "enable_delay", 30);
+	priv->disable_soc_enablekl_delay = dev_read_u32_default(dev, "disable_delay", 30);
+	priv->power_sequence_reverse = dev_read_u32_default(dev, "power-sequence-reverse", 0);
+	ret = gpio_request_by_name(dev, "soc_enablekl-gpios", 0, &priv->soc_enablekl, GPIOD_IS_OUT);
+	if (ret) {
+		printf("%s: Warning: cannot get soc_enablekl GPIO: ret=%d\n",
+		      __func__, ret);
+	}
+
+	printf("%s: : enable_soc_enablekl_delay=%u disable_soc_enablekl_delay=%u power_sequence_reverse=%d minimal_brightness =%u\n", __func__, priv->enable_soc_enablekl_delay, priv->disable_soc_enablekl_delay, priv->power_sequence_reverse, minimal_brightness);
 	debug("%s: done\n", __func__);
 
 
