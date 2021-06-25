@@ -434,9 +434,9 @@ static void parse_cmdline(void)
 	fs_argv[1] = "mmc";
 
 	if (!strcmp(devnum, "0"))
-		fs_argv[2] = "0:f";
+		fs_argv[2] = "0:e";
 	else if (!strcmp(devnum, "1"))
-		fs_argv[2] = "1:f";
+		fs_argv[2] = "1:e";
 	else {
 		printf("Invalid devnum\n");
 		goto end;
@@ -513,9 +513,9 @@ static void parse_hw_config(struct hw_config *hw_conf)
 	fs_argv[1] = "mmc";
 
 	if (!strcmp(devnum, "0"))
-		fs_argv[2] = "0:f";
+		fs_argv[2] = "0:e";
 	else if (!strcmp(devnum, "1"))
-		fs_argv[2] = "1:f";
+		fs_argv[2] = "1:e";
 	else {
 		printf("Invalid devnum\n");
 		goto end;
@@ -783,9 +783,9 @@ static int merge_dts_overlay(cmd_tbl_t *cmdtp, struct fdt_header *working_fdt, c
 	fs_argv[1] = "mmc";
 
 	if (!strcmp(devnum, "0"))
-		fs_argv[2] = "0:f";
+		fs_argv[2] = "0:e";
 	else if (!strcmp(devnum, "1"))
-		fs_argv[2] = "1:f";
+		fs_argv[2] = "1:e";
 	else {
 		printf("Invalid devnum\n");
 		goto fail;
