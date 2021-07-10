@@ -614,8 +614,8 @@ static int flash_device_node(struct fdt_header *working_fdt, char *path, char *p
 	int uart0_rts[3] = {2, 19, 0};
 	int test_clkout2[3] = {0, 8, 3};
 
-	int gpio0_a0[4] = {0, 0, 0, 212};
-	int test_clkout_gpio[4] = {0, 8, 0, 212};
+	int gpio0_a0[4] = {0, 0, 0, 220};
+	int test_clkout_gpio[4] = {0, 8, 0, 220};
 
 	printf("flash_device_node: %s %s\n", path, property);
 
